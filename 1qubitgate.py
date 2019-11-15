@@ -74,7 +74,7 @@ tlist = np.linspace(0,10,200)
 # Hamiltonian in frame rotating with drive freq wd
 H_qubit2 = delta1_ge*tensor(e,id,id,id) + delta1_ef*tensor(f,id,id,id)
 
-H_qubit = delta1_ge*a1.dag()*a1 + alpha_1*a1.dag()**2*a1**2 + delta2_ge*a2.dag()*a2 + alpha_2*a2.dag()**2*a2**2 + delta3_ge*a3.dag()*a3 + alpha_3*a3.dag()**2*a3**2 + delta4_ge*a4.dag()*a4 + alpha_4*a4.dag()**2
+H_qubit = delta1_ge*a1.dag()*a1 + alpha_1*a1.dag()**2*a1**2 + delta2_ge*a2.dag()*a2 + alpha_2*a2.dag()**2*a2**2 + delta3_ge*a3.dag()*a3 + alpha_3*a3.dag()**2*a3**2 + delta4_ge*a4.dag()*a4 + alpha_4*a4.dag()**2*a4**2
 
 
 
@@ -82,16 +82,16 @@ H_selfKerr = alpha_1*a1.dag()**2*a1**2 + alpha_2*a2.dag()**2*a2**2 + alpha_3*a3.
 H_coupling = J_12*(a1.dag()*a2 + a2.dag()*a1) + J_23*(a2.dag()*a3 + a3.dag()*a2) + J_34*(a3.dag()*a4 + a4.dag()*a3)
 
 
-H = H_qubit + H_selfKerr + H_coupling
+H = H_qubit + H_coupling + H_selfKerr
 
 def H_drive_coeff(t, args):
-    sigma2 = .01
+    sigma2 = .1
     tg=6 # gate time
-    pulse_tmax = 3.63
+    pulse_tmax = 10
     A = pi/2
     B = 1
     if t <= pulse_tmax:
-        retval = A*np.exp(-(t-0.5*tg)**2/(2*sigma2))/np.sqrt(2*pi*sigma2)
+        retval =  A*np.exp(-(t-0.5*tg)**2/(2*sigma2))/np.sqrt(2*pi*sigma2)
     else:
         retval = 0
     return retval
