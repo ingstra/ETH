@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib as mp
 from qutip import *
 from numpy import pi
+from numpy.linalg import matrix_power as mpow
 
 # energy levels
 N = 3
@@ -68,9 +69,12 @@ delta3_ef = w3_ef - wd
 delta4_ef = w4_ef - wd
 
 
+tlist = np.linspace(0,10,200)
 
 # Hamiltonian in frame rotating with drive freq wd
-H_qubit = delta1_ge*tensor(e,id,id,id) + delta1_ef*tensor(f,id,id,id)
+H_qubit2 = delta1_ge*tensor(e,id,id,id) + delta1_ef*tensor(f,id,id,id)
+
+H_qubit = delta1_ge*a1.dag()*a1 + alpha_1*a1.dag()**2*a1**2 + delta2_ge*a2.dag()*a2 + alpha_2*a2.dag()**2*a2**2 + delta3_ge*a3.dag()*a3 + alpha_3*a3.dag()**2*a3**2 + delta4_ge*a4.dag()*a4 + alpha_4*a4.dag()**2
 
 
 
@@ -81,24 +85,30 @@ H_coupling = J_12*(a1.dag()*a2 + a2.dag()*a1) + J_23*(a2.dag()*a3 + a3.dag()*a2)
 H = H_qubit + H_selfKerr + H_coupling
 
 def H_drive_coeff(t, args):
-    sigma2 = 1
-    L=5
-    return pi*np.exp(-(t-L)**2/(2*sigma2))/np.sqrt(2*pi*sigma2)
+    sigma2 = .01
+    tg=6 # gate time
+    pulse_tmax = 3.63
+    A = pi/2
+    B = 1
+    if t <= pulse_tmax:
+        retval = A*np.exp(-(t-0.5*tg)**2/(2*sigma2))/np.sqrt(2*pi*sigma2)
+    else:
+        retval = 0
+    return retval
+
+pulse = [H_drive_coeff(t,'') for t in tlist]
+
+plt.plot(tlist,pulse,'.',label='pulse')
 
 H_drive = a1 + a1.dag()
 
-H_tot = [H_qubit, [H_drive, H_drive_coeff]]
+H_tot = [H, [H_drive, H_drive_coeff]]
 
 
 
 
-tlist = np.linspace(0,20,100)
 
 # solve master equation
-
-
-# Collapse operators
-c_ops=[q1_T1*a1, q2_T1*a2, q3_T1*a3, q4_T1*a4]
 
 
 # initial state vacuum
@@ -107,6 +117,8 @@ psi0 = tensor(vac, vac, vac, vac)
 
 
 e_ops=[]
+
+# collapse operators
 c_ops = []
 
 
@@ -119,19 +131,26 @@ nf = f*f.dag()
 ne = e*e.dag()
 ng = g*g.dag()
 
-exp1000 = expect(tensor(ne,ng,ng,ng), rho)
-exp2000 = expect(tensor(nf,ng,ng,ng), rho)
+exp0000 = expect(tensor(ng,id,id,id), rho)
+exp1000 = expect(tensor(ne,id,id,id), rho)
+exp2000 = expect(tensor(nf,id,id,id), rho)
 expx1xx = expect(tensor(id,ne,id,id), rho)
 expxx1x = expect(tensor(id, id, ne, id), rho)
 expxxx1 = expect(tensor(id, id, id, ne), rho)
+expx2xx = expect(tensor(id,nf,id,id), rho)
+expxx2x = expect(tensor(id, id, nf, id), rho)
+expxxx2 = expect(tensor(id, id, id, nf), rho)
 
-
-plt.plot(tlist, exp1000,label='e')
-plt.plot(tlist, exp2000,label='f')
+#plt.plot(tlist, exp0000,label='g')
+plt.plot(tlist, exp1000,label='1xxx')
+plt.plot(tlist, exp2000,label='2xxx')
 
 plt.plot(tlist, expx1xx, label='x1xx')
 plt.plot(tlist, expxx1x, label='xx1x')
 plt.plot(tlist, expxxx1, label='xxx1')
+plt.plot(tlist, expx2xx, label='x2xx')
+plt.plot(tlist, expxx2x, label='xx2x')
+plt.plot(tlist, expxxx2, label='xxx2')
 
 plt.legend()
 plt.show()
