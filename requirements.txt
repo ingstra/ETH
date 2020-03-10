@@ -1,0 +1,15 @@
+qutip>=4.0
+
+
+# Relevant information
+http://qutip.org/docs/4.0.2/modules/qutip/qip/models/circuitprocessor.html
+http://qutip.org/docs/4.0.2/modules/qutip/qip/gates.html
+http://qutip.org/docs/4.0.2/modules/qutip/qip/circuit.html
+http://qutip.org/docs/4.0.2/apidoc/functions.html#quantum-information-processing
+http://qutip.org/docs/4.0.2/apidoc/classes.html#quantum-information-processing
+
+
+http://qutip.org/docs/latest/modules/qutip/qip/circuit.html
+
+
+https://nbviewer.jupyter.org/github/qutip/qutip-notebooks/blob/master/examples/quantum-gates.ipynb
