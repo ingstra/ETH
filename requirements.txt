@@ -11,5 +11,18 @@ http://qutip.org/docs/4.0.2/apidoc/classes.html#quantum-information-processing
 
 http://qutip.org/docs/latest/modules/qutip/qip/circuit.html
 
+http://qutip.org/docs/latest/guide/guide-qip.html
+
 
 https://nbviewer.jupyter.org/github/qutip/qutip-notebooks/blob/master/examples/quantum-gates.ipynb
+
+# Spin chain example
+https://nbviewer.jupyter.org/github/qutip/qutip-notebooks/blob/master/examples/spin-chain-model.ipynb
+
+
+Good SIngle qubit aggte example
+https://nbviewer.jupyter.org/github/qutip/qutip-notebooks/blob/master/examples/qip-noisy-device-simulator.ipynb
+
+
+GOD SHIT
+http://qutip.org/docs/latest/apidoc/classes.html
