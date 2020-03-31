@@ -1,4 +1,5 @@
 import warnings
+import numbers
 
 import numpy as np
 from qutip import *
@@ -57,7 +58,6 @@ class ETHProcessor(ModelProcessor):
         N, correct_global_phase=correct_global_phase, t1=t1, t2=t2)
 
         self.correct_global_phase = correct_global_phase
-
         self.spline_kind = "cubic"
         self.resonance_freq = resonance_freq
         self.anharmonicity = anharmonicity
@@ -67,7 +67,7 @@ class ETHProcessor(ModelProcessor):
 
         self._paras = {}
         self.set_up_params(
-        resonance_freq=resonance_freq,anharmonicity=anharmonicity)
+        N=N,resonance_freq=resonance_freq,anharmonicity=anharmonicity)
         self.set_up_ops(N)
 
     def set_up_ops(self, N):
@@ -81,41 +81,57 @@ class ETHProcessor(ModelProcessor):
         """
         # Annihilation operator for the transmon
         a = destroy(3)
+        eye = qeye(3)
 
         # Drive Hamiltonian (since we have drag pulses, we need both x and y drive)
         H_drive_x = a.dag() + a
         H_drive_y = 1j*(a.dag() - a)
-        self.add_control(H_drive_x, targets = 0, cyclic_permutation = True, label="I")
-        self.add_control(H_drive_y, targets = 0, cyclic_permutation = True, label="Q")
 
-        H_qubit = self.anharmonicity / 2 * pow(a.dag(),2) * pow(a,2)
-        self.add_drift(H_qubit, targets = 0, cyclic_permutation = True)
+        self.add_control(H_drive_x, cyclic_permutation = True, label="I")
+        self.add_control(H_drive_y, cyclic_permutation = True, label="Q")
 
-    def set_up_params(self, resonance_freq, anharmonicity):
+        H_qubits = 0
+        for m in range(N):
+            # Creation operator for the m:th qubit
+            b = tensor([a.dag()*a if m == j else eye for j in range(N)])
+            H_qubits += (self.resonance_freq[m] - self.rotating_freq)*b.dag()*b  + (self.anharmonicity[m]/2) * b.dag()**2 * b**2
+        self.add_drift(H_qubits, targets = list(range(N)))
+
+    def set_up_params(self, N, resonance_freq, anharmonicity):
         """
         Save the parameters in the attribute `params` and check the validity.
 
         Parameters
         ----------
+        N: int
+            The number of qubits in the system.
+
         resonance_freq: list or float
             The frequency of the qubits
 
         anharmonicity: list or float
             The anharmonicity of the qubits
 
-        Notes
-        -----
-        All parameters will be multiplied by 2*pi for simplicity
+        rotating_freq: float
+            The rotating frame frequency
         """
-        self._paras["resonance_freq"] = self.resonance_freq * 2 * np.pi
-        self._paras["anharmonicity"] = self.anharmonicity * 2 * np.pi
+        if isinstance(self.resonance_freq, numbers.Real):
+            self.resonance_freq = [self.resonance_freq] * N
+        self._paras["resonance_freq"] = self.resonance_freq
+
+        if isinstance(self.anharmonicity, numbers.Real):
+            self.anharmonicity = [self.anharmonicity] * N
+        self._paras["anharmonicity"] = self.anharmonicity
+
+        self.rotating_freq = np.mean(self.resonance_freq)
+        self._paras["rotating_freq"] = self.rotating_freq
 
     def get_ops_labels(self):
         """
-        Get the labels for each Hamiltonian.
+        Get the labels for each control Hamiltonian.
         """
-        return ([r"$a^\dagger + a$"] +
-                [r"$i(a^\dagger - a)$"])
+        return ([r"$a^\dagger_%d + a_%d$" % (n,n) for n in range(self.N)] +
+                [r"$i(a^\dagger_%d - a_%d)$" % (n,n) for n in range(self.N)])
 
     def load_circuit(self, qc):
         """
@@ -143,8 +159,10 @@ class ETHProcessor(ModelProcessor):
             self.N, self._paras,
             global_phase=0., num_ops=len(self.ctrls))
         tlist, self.coeffs, self.global_phase = dec.decompose(gates)
+        #print('tlist',tlist)
+        #print('self.coeffs',self.coeffs)
         for i in range(len(self.pulses)):
-            self.pulses[i].tlist = tlist[0]
+            self.pulses[i].tlist = tlist
 
         return tlist, self.coeffs
 
@@ -164,6 +182,7 @@ class ETHProcessor(ModelProcessor):
             The circuit representation with elementary gates
             that can be implemented in this model.
         """
+        # THIS HAVEN'T BEEN WORKED ON
         self.qc0 = qc
         self.qc1 = self.qc0.resolve_gates(
             basis=["ISWAP", "CSIGN", "RX", "RZ"])

@@ -66,10 +66,31 @@ class ETHCompiler(GateCompiler):
                 raise ValueError("Unsupported gate %s" % gate.name)
             self.gate_decomps[gate.name](gate)
 
-        tlist = self.dt_list
-        coeffs = self.coeff_list
+        #print('self.coeff_list',np.shape(self.coeff_list))
+        coeffs = np.vstack(self.coeff_list)
+        tlist = np.empty(len(self.dt_list))
 
+
+        #tlist = self. dt_list
+        #coeffs = self.coeff_list
+        #print('tlist',tlist)
+        #print('coeffs',self.coeff_list)
+        #print(np.shape(tlist))
+        #print(np.shape(self.coeff_list))
+
+        t = 0
+        #tlist = np.empty(len(self.dt_list)+1)
+        for i in range(len(self.dt_list)):
+            tlist[i] = t
+            t += self.dt_list[i]
+
+        #print('coeffs_shape',coeffs)
+        #print('coeffs_shape',np.shape(coeffs))
+        #print('tlist',tlist)
+        #print('tlist_shape',np.shape(tlist))
         #tlist, coeffs = super(ETHCompiler, self).decompose(gates)
+
+        #print(np.hstack([[0], tlist]))
         return tlist, coeffs, self.global_phase
 
     def rz_dec(self, gate):
@@ -82,11 +103,12 @@ class ETHCompiler(GateCompiler):
         """
         Compiler for the RX gate
         """
-        # Gaussian width in μs
-        sigma = 0.010 # = 10 ns
 
-        # Gate time in μs
-        L = 0.050 # = 50 ns
+        # Gaussian width in ns
+        sigma = 10
+
+        # Gate time in ns
+        L = 50
 
         def H_drive_coeff_x(t, args):
 
@@ -122,11 +144,14 @@ class ETHCompiler(GateCompiler):
             Q = -q * (t-0.5*L) / sigma * E # dE/dt
             return Q*np.cos(drive_freq * t) + I*np.sin(drive_freq * t)
 
-        # Total time in μs
+        # Total time in ns
         t_total = L
-        tlist = np.linspace(0,t_total,500)
+        #tlist = np.linspace(0,t_total,500)
+        tlist = np.linspace(0,t_total,100)
 
-        amp = 63.45380720748712 * gate.arg_value / np.pi
+        #dt = tlist[1] - tlist[0]
+        #tlist = np.append(tlist,(t_total+dt))
+        amp = 0.06345380720748712 * gate.arg_value / np.pi
 
         args = {'amp': amp, 'qscale': 0.032, 'freq': 0}
 
@@ -134,10 +159,26 @@ class ETHCompiler(GateCompiler):
         I = H_drive_coeff_x(tlist, args)
         # out of-phase component
         Q = H_drive_coeff_y(tlist, args)
+        I = np.delete(I, len(I)-1)
+        Q = np.delete(Q, len(Q)-1)
+        R = np.vstack((I,Q))
+        #pulse = np.zeros(self.num_ops)
+        #q_ind = gate.targets[0]
 
-        self.dt_list.append(tlist)
-        self.coeff_list.append(I)
-        self.coeff_list.append(Q)
+        dt_list = tlist[1:] - tlist[:-1]
+        self.dt_list.extend(dt_list)
+
+        #print(len(self.coeff_list))
+        if len(self.coeff_list) == 0:
+            self.coeff_list.append(I)
+            self.coeff_list.append(Q)
+            self.coeff_list = np.vstack(self.coeff_list)
+        else:
+            self.coeff_list = np.concatenate((self.coeff_list,R),axis=1)
+
+        #self.coeff_list = np.concatenate((self.coeff_list,[I,Q]),axis=1)
+        #self.coeff_list.append(I)
+        #self.coeff_list.append(Q)
 
     def globalphase_dec(self, gate):
         """
