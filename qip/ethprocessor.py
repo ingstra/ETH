@@ -5,13 +5,14 @@ import numpy as np
 from qutip import *
 from qutip.qip.circuit import QubitCircuit
 from qutip.qip.device.processor import Processor
-from qutip.qip.device.modelprocessor import ModelProcessor
+#from qutip.qip.device.modelprocessor import ModelProcessor
 from qutip.qip.compiler.gatecompiler import GateCompiler
 from qip.ethcompiler import ETHCompiler
+from qip.quantumdevice import QuantumDevice
 
 __all__ = ['ETHProcessor']
 
-class ETHProcessor(ModelProcessor):
+class ETHProcessor(QuantumDevice):
     """
     The processor based on the physical implementation of
     a ETH processor.
@@ -33,16 +34,20 @@ class ETHProcessor(ModelProcessor):
     anharmonicity: list or float
         The anharmonicity of the qubits
 
+    # NOT IN USE
     cpl_map: list
         cpl_map[[i, j], [k, l]]: i-th (k-th) and j-th (l-th) qubits are coupled
 
+    # NOT IN USE
     cpl: list
         cpl_list[i]: coupling strength of i-th couple (defined by cpl_map)
 
+    # NOT IN USE
     t1: list or float
         Characterize the decoherence of amplitude damping for
         each qubit. A list of size ``N`` or a float for all qubits.
 
+    # NOT IN USE
     t2: list of float
         Characterize the decoherence of dephasing for
         each qubit. A list of size ``N`` or a float for all qubits.
@@ -154,7 +159,7 @@ class ETHProcessor(ModelProcessor):
             one Hamiltonian.
         """
         gates = qc.gates
-
+        print('gates',gates)
         dec = ETHCompiler(
             self.N, self._paras,
             global_phase=0., num_ops=len(self.ctrls))
