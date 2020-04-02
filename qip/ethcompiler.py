@@ -54,6 +54,7 @@ class ETHCompiler(GateCompiler):
                              "GLOBALPHASE": self.globalphase_dec
                              }
         self.N = N
+        #print('num_ops = ', num_ops)
         self.global_phase = global_phase
 
     def decompose(self, gates):
@@ -66,7 +67,7 @@ class ETHCompiler(GateCompiler):
                 raise ValueError("Unsupported gate %s" % gate.name)
             self.gate_decomps[gate.name](gate)
 
-        #print('self.coeff_list',np.shape(self.coeff_list))
+        print('shape self.coeff_list',np.shape(self.coeff_list))
         coeffs = np.vstack(self.coeff_list)
         tlist = np.empty(len(self.dt_list))
 
@@ -97,6 +98,9 @@ class ETHCompiler(GateCompiler):
         """
         Compiler for the RZ gate
         """
+        # Virtual rz gate
+        pulse = np.zeros(self.num_ops)
+        q_ind = gate.targets[0]
         # todo
 
     def rx_dec(self, gate):
@@ -106,40 +110,29 @@ class ETHCompiler(GateCompiler):
 
         # Gaussian width in ns
         sigma = 10
-
         # Gate time in ns
         L = 50
-
         def H_drive_coeff_x(t, args):
 
             # Amplitude, needs to be optimized to get perfect pi pulse or pi/2 pulse
             B = args['amp']
-
             # DRAG-parameter, needs to be optimized to get no phase errors in a pi/2 pulse
             q = args['qscale']
-
             drive_freq = args['freq']
-
             # E(t)
             E = B * np.exp(-pow(t-0.5*L, 2) / (2*pow(sigma,2)))
-
             I = E
             Q = q * (t-0.5*L) / sigma * E # dE/dt
             return I*np.cos(drive_freq * t) + Q*np.sin(drive_freq * t)
 
         def H_drive_coeff_y(t, args):
-
             # Amplitude, needs to be optimized to get perfect pi pulse or pi/2 pulse
             B = args['amp']
-
             # DRAG-parameter, needs to be optimized to get no phase errors in a pi/2 pulse
             q = args['qscale']
-
             drive_freq = args['freq']
-
             # E(t)
             E = B * np.exp(-pow(t-0.5*L, 2) / (2*pow(sigma,2)))
-
             I = E
             Q = -q * (t-0.5*L) / sigma * E # dE/dt
             return Q*np.cos(drive_freq * t) + I*np.sin(drive_freq * t)
@@ -152,29 +145,37 @@ class ETHCompiler(GateCompiler):
         #dt = tlist[1] - tlist[0]
         #tlist = np.append(tlist,(t_total+dt))
         amp = 0.06345380720748712 * gate.arg_value / np.pi
-
         args = {'amp': amp, 'qscale': 0.032, 'freq': 0}
+
+        pulse = np.zeros((self.num_ops,len(tlist)-1)) # set all pulses 2 zero
+        q = gate.targets[0] # target qubit
+        #print('q',q)
 
         # in-phase component
         I = H_drive_coeff_x(tlist, args)
         # out of-phase component
         Q = H_drive_coeff_y(tlist, args)
+
         I = np.delete(I, len(I)-1)
         Q = np.delete(Q, len(Q)-1)
         R = np.vstack((I,Q))
-        #pulse = np.zeros(self.num_ops)
-        #q_ind = gate.targets[0]
 
         dt_list = tlist[1:] - tlist[:-1]
         self.dt_list.extend(dt_list)
 
+        pulse[2*q:2*(1+q),:] = R
+
+        #print(pulse)
+        #print(np.shape(pulse))
+
         #print(len(self.coeff_list))
         if len(self.coeff_list) == 0:
-            self.coeff_list.append(I)
-            self.coeff_list.append(Q)
-            self.coeff_list = np.vstack(self.coeff_list)
+            #self.coeff_list.append(I)
+            #self.coeff_list.append(Q)
+            self.coeff_list.extend(pulse)
+            #self.coeff_list = np.vstack(self.coeff_list)
         else:
-            self.coeff_list = np.concatenate((self.coeff_list,R),axis=1)
+            self.coeff_list = np.concatenate((self.coeff_list,pulse),axis=1)
 
         #self.coeff_list = np.concatenate((self.coeff_list,[I,Q]),axis=1)
         #self.coeff_list.append(I)
