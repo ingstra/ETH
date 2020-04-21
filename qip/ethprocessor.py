@@ -101,6 +101,7 @@ class ETHProcessor(QuantumDevice):
             b = tensor([a.dag()*a if m == j else eye for j in range(N)])
             H_qubits += (self.resonance_freq[m] - self.rotating_freq)*b.dag()*b  + (self.anharmonicity[m]/2) * b.dag()**2 * b**2
         self.add_drift(H_qubits, targets = list(range(N)))
+        #print(self.add_drift(H_qubits, targets = range(N)))
 
     def set_up_params(self, N, resonance_freq, anharmonicity):
         """
@@ -159,11 +160,11 @@ class ETHProcessor(QuantumDevice):
             one Hamiltonian.
         """
         gates = qc.gates
-        print('gates',gates)
+        layers = qc.layers()
         dec = ETHCompiler(
             self.N, self._paras,
             global_phase=0., num_ops=len(self.ctrls))
-        tlist, self.coeffs, self.global_phase = dec.decompose(gates)
+        tlist, self.coeffs, self.global_phase = dec.decompose(layers)
         #print('tlist',tlist)
         #print('self.coeffs',self.coeffs)
         for i in range(len(self.pulses)):

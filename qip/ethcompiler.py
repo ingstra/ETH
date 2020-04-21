@@ -57,19 +57,48 @@ class ETHCompiler(GateCompiler):
         #print('num_ops = ', num_ops)
         self.global_phase = global_phase
 
-    def decompose(self, gates):
+    def decompose(self, layers):
         # TODO further improvement can be made here,
         # e.g. merge single qubit rotation gate, combine XX gates etc.
-        self.dt_list = []
-        self.coeff_list = []
-        for gate in gates:
-            if gate.name not in self.gate_decomps:
-                raise ValueError("Unsupported gate %s" % gate.name)
-            self.gate_decomps[gate.name](gate)
+        self.dt_list = [[] for i in range(len(layers))]
+        self.coeff_list = [[] for i in range(self.num_ops)]
+        temp = []
+        for layer_idx,layer in enumerate(layers):
+            #print('layer_idx',layer_idx)
+            for gate in layer:
+                if gate.name not in self.gate_decomps:
+                    raise ValueError("Unsupported gate %s" % gate.name)
+                self.gate_decomps[gate.name](gate,layer_idx)
+            #print('self.coeff_list',self.coeff_list)
+            coeff_len = 0
+            for i in range(self.num_ops):
+                try:
+                    if len(self.coeff_list[i][layer_idx]) > coeff_len:
+                        coeff_len = len(self.coeff_list[i][layer_idx])
+                except:
+                    0
 
-        print('shape self.coeff_list',np.shape(self.coeff_list))
-        coeffs = np.vstack(self.coeff_list)
-        tlist = np.empty(len(self.dt_list))
+            for i in range(self.num_ops):
+                try:
+                    if len(self.coeff_list[i][layer_idx]) < coeff_len:
+                        self.coeff_list[i][layer_idx].extend([0] * (coeff_len-len(self.coeff_list[i][layer_idx])))
+                except:
+                    self.coeff_list[i].append([0] * coeff_len)
+
+            #print('self_coeff',self.coeff_list)
+            # Get the longest list time list
+            #temp = max((x) for x in self.dt_list[idx]]
+            temp.extend(max(self.dt_list[layer_idx], key = len)) # this is the time for layer 1
+            #print('coeff_list',self.coeff_list)
+            #print('temp',temp)
+
+        #print('dt_list',self.dt_list[0][0])
+
+
+        # Have some layer stuff
+        #print('shape self.coeff_list',np.shape(self.coeff_list))
+        #coeffs = np.vstack(self.coeff_list)
+        tlist = np.empty(len(temp))
 
 
         #tlist = self. dt_list
@@ -81,9 +110,9 @@ class ETHCompiler(GateCompiler):
 
         t = 0
         #tlist = np.empty(len(self.dt_list)+1)
-        for i in range(len(self.dt_list)):
+        for i in range(len(temp)):
             tlist[i] = t
-            t += self.dt_list[i]
+            t += temp[i]
 
         #print('coeffs_shape',coeffs)
         #print('coeffs_shape',np.shape(coeffs))
@@ -91,7 +120,14 @@ class ETHCompiler(GateCompiler):
         #print('tlist_shape',np.shape(tlist))
         #tlist, coeffs = super(ETHCompiler, self).decompose(gates)
 
+        # Join sublists
+        for i in range(self.num_ops):
+            self.coeff_list[i] = np.array(sum(self.coeff_list[i], []))
+
+        coeffs = self.coeff_list
+        #print('coeffs',np.shape(coeffs))
         #print(np.hstack([[0], tlist]))
+        #print(len(tlist))
         return tlist, coeffs, self.global_phase
 
     def rz_dec(self, gate):
@@ -103,11 +139,11 @@ class ETHCompiler(GateCompiler):
         q_ind = gate.targets[0]
         # todo
 
-    def rx_dec(self, gate):
+    def rx_dec(self, gate, idx):
         """
         Compiler for the RX gate
         """
-
+        #print('idx',idx)
         # Gaussian width in ns
         sigma = 10
         # Gate time in ns
@@ -147,7 +183,8 @@ class ETHCompiler(GateCompiler):
         amp = 0.06345380720748712 * gate.arg_value / np.pi
         args = {'amp': amp, 'qscale': 0.032, 'freq': 0}
 
-        pulse = np.zeros((self.num_ops,len(tlist)-1)) # set all pulses 2 zero
+        # set pulse to zero
+        pulse = np.zeros(len(tlist)-1) # This we should not do!
         q = gate.targets[0] # target qubit
         #print('q',q)
 
@@ -159,23 +196,20 @@ class ETHCompiler(GateCompiler):
         I = np.delete(I, len(I)-1)
         Q = np.delete(Q, len(Q)-1)
         R = np.vstack((I,Q))
+        #print('R',R)
 
         dt_list = tlist[1:] - tlist[:-1]
-        self.dt_list.extend(dt_list)
+        self.dt_list[idx].append(dt_list)
 
-        pulse[2*q:2*(1+q),:] = R
+        #pulse[2*q:2*(1+q),:] = R
+        #print('pulse',pulse)
 
         #print(pulse)
         #print(np.shape(pulse))
+        self.coeff_list[2*q].append(list(I))
+        self.coeff_list[2*q+1].append(list(Q))
 
         #print(len(self.coeff_list))
-        if len(self.coeff_list) == 0:
-            #self.coeff_list.append(I)
-            #self.coeff_list.append(Q)
-            self.coeff_list.extend(pulse)
-            #self.coeff_list = np.vstack(self.coeff_list)
-        else:
-            self.coeff_list = np.concatenate((self.coeff_list,pulse),axis=1)
 
         #self.coeff_list = np.concatenate((self.coeff_list,[I,Q]),axis=1)
         #self.coeff_list.append(I)
