@@ -174,8 +174,6 @@ class QuantumDevice(Processor):
         coeffs: array_like
             The transposed pulse matrix
         """
-        #print('self.ctrls',self.ctrls)
-        #print('full_coeffs',self.get_full_coeffs().T)
         return (self.ctrls, self.get_full_coeffs().T)
 
     def pulse_matrix(self):
@@ -189,22 +187,17 @@ class QuantumDevice(Processor):
         """
         #dt = 0.01
         H_ops, H_u = self.get_ops_and_u()
-        #print('H_ops=',H_ops)
-        #print('H_u=',H_u)
         # FIXME This might becomes a problem if new tlist other than
         # int the default pulses are added.
         tlist = self.get_full_tlist()
-        #print('tlist',tlist)
         dt = tlist[1] - tlist[0]
         t_tot = tlist[-1]
-        #print('t_tot',t_tot)
         n_t = len(tlist)
         n_ops = len(H_ops) # Number of controls = 2
 
         #t = np.linspace(0, t_tot, n_t) # len(t) = len(tlist)
         t = tlist
         u = H_u.T
-        #print('u',np.size(u))
         #u = np.zeros((n_ops, n_t))
 
         return tlist, u, self.get_ops_labels()

@@ -88,20 +88,27 @@ class ETHProcessor(QuantumDevice):
         a = destroy(3)
         eye = qeye(3)
 
-        # Drive Hamiltonian (since we have drag pulses, we need both x and y drive)
-        H_drive_x = a.dag() + a
-        H_drive_y = 1j*(a.dag() - a)
-
-        self.add_control(H_drive_x, cyclic_permutation = True, label="I")
-        self.add_control(H_drive_y, cyclic_permutation = True, label="Q")
+        """
+        for m in range(N):
+            H_qubit = (self.resonance_freq[m] - self.rotating_freq)*a.dag()*a+(self.anharmonicity[m]/2)*pow(a.dag(),2)*pow(a,2)
+            self.add_drift(H_qubit, targets = m)
+        """
 
         H_qubits = 0
         for m in range(N):
             # Creation operator for the m:th qubit
-            b = tensor([a.dag()*a if m == j else eye for j in range(N)])
+            b = tensor([a if m == j else eye for j in range(N)])
+
+            # Drive Hamiltonian (since we have drag pulses, we need both x and y drive)
+            H_drive_x = b.dag() + b
+            H_drive_y = 1j*(b.dag() - b)
+
+            self.add_control(H_drive_x, targets = list(range(N)), label="I")
+            self.add_control(H_drive_y, targets = list(range(N)), label="Q")
+
             H_qubits += (self.resonance_freq[m] - self.rotating_freq)*b.dag()*b  + (self.anharmonicity[m]/2) * b.dag()**2 * b**2
+
         self.add_drift(H_qubits, targets = list(range(N)))
-        #print(self.add_drift(H_qubits, targets = range(N)))
 
     def set_up_params(self, N, resonance_freq, anharmonicity):
         """
@@ -130,6 +137,7 @@ class ETHProcessor(QuantumDevice):
         self._paras["anharmonicity"] = self.anharmonicity
 
         self.rotating_freq = np.mean(self.resonance_freq)
+
         self._paras["rotating_freq"] = self.rotating_freq
 
     def get_ops_labels(self):
@@ -165,8 +173,6 @@ class ETHProcessor(QuantumDevice):
             self.N, self._paras,
             global_phase=0., num_ops=len(self.ctrls))
         tlist, self.coeffs, self.global_phase = dec.decompose(layers)
-        #print('tlist',tlist)
-        #print('self.coeffs',self.coeffs)
         for i in range(len(self.pulses)):
             self.pulses[i].tlist = tlist
 
