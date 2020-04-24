@@ -51,6 +51,7 @@ class ETHCompiler(GateCompiler):
             N=N, params=params, num_ops=num_ops)
         self.gate_decomps = {"RZ": self.rz_dec,
                              "RX": self.rx_dec,
+                             "CSIGN": self.csign_dec,
                              "GLOBALPHASE": self.globalphase_dec
                              }
         self.N = N
@@ -135,7 +136,7 @@ class ETHCompiler(GateCompiler):
             # E(t)
             E = B * np.exp(-pow(t-0.5*L, 2) / (2*pow(sigma,2)))
             I = E
-            Q = q * (t-0.5*L) / sigma * E # dE/dt
+            Q = q * (t-0.5*L) / pow(sigma,2) * E # dE/dt
             return I*np.cos(drive_freq * t) + Q*np.sin(drive_freq * t)
 
         def H_drive_coeff_y(t, args):
@@ -147,22 +148,28 @@ class ETHCompiler(GateCompiler):
             # E(t)
             E = B * np.exp(-pow(t-0.5*L, 2) / (2*pow(sigma,2)))
             I = E
-            Q = -q * (t-0.5*L) / sigma * E # dE/dt
+            Q = -q * (t-0.5*L) / pow(sigma,2) * E # dE/dt
             return Q*np.cos(drive_freq * t) + I*np.sin(drive_freq * t)
 
         # Total time in ns
         t_total = L
         #tlist = np.linspace(0,t_total,500)
-        tlist = np.linspace(0,t_total,100)
+        tlist = np.linspace(0,t_total,500)
 
         #dt = tlist[1] - tlist[0]
         #tlist = np.append(tlist,(t_total+dt))
         amp = 0.06345380720748712 * gate.arg_value / np.pi
-        args = {'amp': amp, 'qscale': 0.032, 'freq': 0}
 
         # set pulse to zero
         pulse = np.zeros(len(tlist)-1) # This we should not do!
         q = gate.targets[0] # target qubit
+
+        # Anharmonicity
+        alpha = self.params['Anharmonicity'][q]
+        omega_drive = self.params['Resonance frequency'][q]
+        rotating_frame = self.params['Rotating frequency']
+
+        args = {'amp': amp, 'qscale': -.5/alpha, 'freq': (rotating_frame - omega_drive)}
 
         # in-phase component
         I = H_drive_coeff_x(tlist, args)
@@ -171,19 +178,62 @@ class ETHCompiler(GateCompiler):
 
         I = np.delete(I, len(I)-1)
         Q = np.delete(Q, len(Q)-1)
-        R = np.vstack((I,Q))
 
         dt_list = tlist[1:] - tlist[:-1]
         self.dt_list[idx].append(dt_list)
 
-        #pulse[2*q:2*(1+q),:] = R
+        self.coeff_list[3*q].append(list(I))
+        self.coeff_list[3*q+1].append(list(Q))
 
-        self.coeff_list[2*q].append(list(I))
-        self.coeff_list[2*q+1].append(list(Q))
+    def csign_dec(self, gate, idx):
+        """
+        Compiler for the CSIGN gate
+        """
+        omega = self.params['Resonance frequency']
 
-        #self.coeff_list = np.concatenate((self.coeff_list,[I,Q]),axis=1)
-        #self.coeff_list.append(I)
-        #self.coeff_list.append(Q)
+        # Pulse shape
+        def Phi(t,args):
+
+            # Arguments
+            a = args['amp']
+            L = args['L']
+            b = args['buffer']
+            C = args['conversion constant']
+
+            # Square pulse of length L and amplitude a centered at (b+L/2)
+            A = a * (np.heaviside(t - b, 0) - np.heaviside(t - (L+b), 0))
+
+            # Gaussian with mean (b+L/2) and std sigma
+            sigma = 1
+            f = np.exp(-pow(t-(b+L/2),2)/(2*pow(sigma,2)))
+
+            return C * np.convolve(A, f, mode = 'same') / np.sum(f)
+
+        # Flux tuning of qubit n
+        def Delta(t,args):
+            n = args['n']
+            d = 0.78
+            return omega[n] - omega[n] * pow(np.cos(Phi(t,args))**2 + d**2*np.sin(Phi(t,args))**2,1/4)
+
+        # Gate length
+        L = 96
+        # buffer
+        b = 15
+        # Total time in ns
+        t_total = L+2*b
+        #tlist = np.linspace(0,t_total,500)
+        tlist = np.linspace(0,t_total,100)
+
+        dt_list = tlist[1:] - tlist[:-1]
+        self.dt_list[idx].append(dt_list)
+
+        q = gate.controls[0] # control qubit
+
+        args = {'n': q,'amp': 1.46, 'L': L, 'buffer': b, 'conversion constant': 0.47703297}
+        coeffs = Delta(tlist,args)
+        coeffs = np.delete(coeffs, len(coeffs)-1)
+        self.coeff_list[3*q+2].append(list(coeffs))
+
 
     def globalphase_dec(self, gate):
         """

@@ -60,20 +60,9 @@ class QuantumDevice(Processor):
 
     Parameters
     ----------
-    N: int
-        The number of component systems.
-
     correct_global_phase: boolean, optional
         If true, the analytical solution will track the global phase. It
         has no effect on the numerical solution.
-
-    t1: list or float
-        Characterize the decoherence of amplitude damping for
-        each qubit. A list of size `N` or a float for all qubits.
-
-    t2: list of float
-        Characterize the decoherence of dephasing for
-        each qubit. A list of size `N` or a float for all qubits.
 
     Attributes
     ----------
@@ -86,7 +75,7 @@ class QuantumDevice(Processor):
         will track the global phase.
         It has no effect on the numerical solution.
     """
-    def __init__(self, N, correct_global_phase=True, t1=None, t2=None):
+    def __init__(self, N, correct_global_phase=True):
         super(QuantumDevice, self).__init__(N, t1=t1, t2=t2)
         self.correct_global_phase = correct_global_phase
         self.global_phase = 0.
