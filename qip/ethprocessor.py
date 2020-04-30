@@ -42,15 +42,19 @@ class ETHProcessor(Processor):
         self.spline_kind = "cubic"
 
         # Qubit frequency in (GHz)
-        #self.resonance_freq = [2*np.pi * 5.708390, 2*np.pi * 5.708390, 2*np.pi * 5.708390, 2*np.pi * 5.708390]
         self.resonance_freq = [2*np.pi * 5.708390, 2*np.pi * 5.202204, 2*np.pi * 4.877051, 2*np.pi * 4.383388]
 
         # Anharmonicity in (GHz)
-        #self.anharmonicity = [- 2*np.pi * 0.261081457, - 2*np.pi * 0.261081457, -2*np.pi * 0.261081457, -2*np.pi * 0.261081457]
-        # True
         self.anharmonicity = [- 2*np.pi * 0.261081457, - 2*np.pi * 0.275172227, -2*np.pi * 0.277331082, -2*np.pi * 0.286505059]
 
-        self.dims = [3] * self.N  # Three level systems
+        # Coupling strength in (GHz) between qubits [1-2, 2-3, 3-4]
+        self.cpl = [2*np.pi * 3.8*1e-3, 2*np.pi * 3.4*1e-3 , 2*np.pi * 3.5*1e-3]
+
+        # Coupling map
+        self.cpl_map = [[0,1],[1,2],[2,3]]
+
+        # Qutrit system
+        self.dims = [3] * self.N
 
         self._paras = {}
         self.set_up_params()
@@ -61,7 +65,6 @@ class ETHProcessor(Processor):
         """
         self._paras["Resonance frequency"] = self.resonance_freq
         self._paras["Anharmonicity"] = self.anharmonicity
-        #self._paras["Rotating frequency"] = self.rotating_freq
 
     @property
     def params(self):
@@ -95,21 +98,16 @@ class ETHProcessor(Processor):
             H_qubits += (self.resonance_freq[m] - self.rotating_freq)*b.dag()*b  + (self.anharmonicity[m]/2) * b.dag()**2 * b**2
 
         self.add_drift(H_qubits, targets = list(range(N)))
+        
         # Construct the Interaction/Coupling Hamiltonian
-        """
-        if self.cpl:
+        if N > 1:
             H_cpl = 0
-            for i, g in enumerate(self.cpl):
-                print(i)
-                print(g)
-                x, y = self.cpl_map[i]
+            for k in range(N-1):
+                x, y = self.cpl_map[k]
                 b_x = tensor([a if x == j else eye for j in range(N)])
                 b_y = tensor([a if y == j else eye for j in range(N)])
-                H_cpl += g*(b_x.dag()*b_y + b_y.dag()*b_x)
-            self.add_drift(H_qubits+H_cpl, targets = list(range(N)))
-        else:
-            self.add_drift(H_qubits, targets = list(range(N)))
-        """
+                H_cpl += self.cpl[k]*(b_x.dag()*b_y + b_y.dag()*b_x)
+            self.add_drift(H_cpl, targets = list(range(N)))
 
     def load_circuit(self, qc):
         """

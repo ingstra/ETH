@@ -55,6 +55,7 @@ class ETHCompiler(GateCompiler):
                              "GLOBALPHASE": self.globalphase_dec
                              }
         self.N = N
+        self.phase = [0] * N
         self.global_phase = global_phase
 
     def decompose(self, layers):
@@ -63,12 +64,16 @@ class ETHCompiler(GateCompiler):
         self.dt_list = [[] for i in range(len(layers))]
         self.coeff_list = [[] for i in range(self.num_ops)]
         temp = []
-        for layer_idx,layer in enumerate(layers):
+        for layer_idx, layer in enumerate(layers):
             for gate in layer:
                 if gate.name not in self.gate_decomps:
                     raise ValueError("Unsupported gate %s" % gate.name)
-                self.gate_decomps[gate.name](gate,layer_idx)
+                if gate.name == "RZ":
+                    self.gate_decomps[gate.name](gate)
+                else:
+                    self.gate_decomps[gate.name](gate,layer_idx)
             coeff_len = 0
+
             for i in range(self.num_ops):
                 try:
                     if len(self.coeff_list[i][layer_idx]) > coeff_len:
@@ -85,12 +90,19 @@ class ETHCompiler(GateCompiler):
 
             # Get the longest list time list
             #temp = max((x) for x in self.dt_list[idx]]
-            temp.extend(max(self.dt_list[layer_idx], key = len)) # this is the time for layer 1
+            #print(self.dt_list[layer_idx])
+            #m = max(self.dt_list[layer_idx], key = len) if self.dt_list[layer_idx] else [0]
+            #print('m',m)
+            #print('dt_list',self.dt_list[layer_idx])
+            try:
+                temp.extend(max(self.dt_list[layer_idx], key = len)) # this is the time for layer 1
+            except:
+                0
 
+        #print(temp)
         # Have some layer stuff
         #coeffs = np.vstack(self.coeff_list)
         tlist = np.empty(len(temp))
-
 
         #tlist = self. dt_list
         #coeffs = self.coeff_list
@@ -107,16 +119,17 @@ class ETHCompiler(GateCompiler):
             self.coeff_list[i] = np.array(sum(self.coeff_list[i], []))
 
         coeffs = self.coeff_list
+        #rint(len(tlist))
+        #print(np.shape(coeffs))
         return tlist, coeffs, self.global_phase
 
     def rz_dec(self, gate):
         """
         Compiler for the RZ gate
         """
-        # Virtual rz gate
-        pulse = np.zeros(self.num_ops)
-        q_ind = gate.targets[0]
-        # todo
+        # Virtual Z-gate
+        q = gate.targets[0] # target qubit
+        self.phase[q] += gate.arg_value
 
     def rx_dec(self, gate, idx):
         """
@@ -133,11 +146,12 @@ class ETHCompiler(GateCompiler):
             # DRAG-parameter, needs to be optimized to get no phase errors in a pi/2 pulse
             q = args['qscale']
             drive_freq = args['freq']
+            phi = args['phase']
             # E(t)
             E = B * np.exp(-pow(t-0.5*L, 2) / (2*pow(sigma,2)))
             I = E
             Q = q * (t-0.5*L) / pow(sigma,2) * E # dE/dt
-            return I*np.cos(drive_freq * t) + Q*np.sin(drive_freq * t)
+            return I*np.cos(drive_freq * t + phi) + Q*np.sin(drive_freq * t + phi)
 
         def H_drive_coeff_y(t, args):
             # Amplitude, needs to be optimized to get perfect pi pulse or pi/2 pulse
@@ -145,31 +159,28 @@ class ETHCompiler(GateCompiler):
             # DRAG-parameter, needs to be optimized to get no phase errors in a pi/2 pulse
             q = args['qscale']
             drive_freq = args['freq']
+            phi = args['phase']
             # E(t)
             E = B * np.exp(-pow(t-0.5*L, 2) / (2*pow(sigma,2)))
             I = E
-            Q = -q * (t-0.5*L) / pow(sigma,2) * E # dE/dt
-            return Q*np.cos(drive_freq * t) + I*np.sin(drive_freq * t)
+            Q = q * (t-0.5*L) / pow(sigma,2) * E # dE/dt
+            return I*np.sin(drive_freq * t + phi) - Q*np.cos(drive_freq * t + phi)
 
         # Total time in ns
         t_total = L
         #tlist = np.linspace(0,t_total,500)
         tlist = np.linspace(0,t_total,500)
 
-        #dt = tlist[1] - tlist[0]
-        #tlist = np.append(tlist,(t_total+dt))
-        amp = 0.06345380720748712 * gate.arg_value / np.pi
-
-        # set pulse to zero
-        pulse = np.zeros(len(tlist)-1) # This we should not do!
-        q = gate.targets[0] # target qubit
-
+        # target qubit
+        q = gate.targets[0]
+        #print('q',q)
         # Anharmonicity
         alpha = self.params['Anharmonicity'][q]
         omega_drive = self.params['Resonance frequency'][q]
         rotating_frame = self.params['Rotating frequency']
-
-        args = {'amp': amp, 'qscale': -.5/alpha, 'freq': (rotating_frame - omega_drive)}
+        amp = 0.06345380720748712 * gate.arg_value / np.pi
+        phase = self.phase[q]
+        args = {'amp': amp, 'qscale': -.5/alpha, 'phase': phase, 'freq': (rotating_frame - omega_drive)}
 
         # in-phase component
         I = H_drive_coeff_x(tlist, args)
@@ -210,6 +221,7 @@ class ETHCompiler(GateCompiler):
             return C * np.convolve(A, f, mode = 'same') / np.sum(f)
 
         # Flux tuning of qubit n
+        rotating_frame = self.params['Rotating frequency']
         def Delta(t,args):
             n = args['n']
             d = 0.78
@@ -221,14 +233,17 @@ class ETHCompiler(GateCompiler):
         b = 15
         # Total time in ns
         t_total = L+2*b
-        #tlist = np.linspace(0,t_total,500)
-        tlist = np.linspace(0,t_total,100)
+        tlist = np.linspace(0,t_total,500)
+        #tlist = np.linspace(0,t_total,100)
+
+        # Phase angles
+        alpha = 4118.449374231894
+        beta = 4372.68517659092
 
         dt_list = tlist[1:] - tlist[:-1]
         self.dt_list[idx].append(dt_list)
 
         q = gate.controls[0] # control qubit
-
         args = {'n': q,'amp': 1.46, 'L': L, 'buffer': b, 'conversion constant': 0.47703297}
         coeffs = Delta(tlist,args)
         coeffs = np.delete(coeffs, len(coeffs)-1)
