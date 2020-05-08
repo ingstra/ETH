@@ -58,7 +58,48 @@ class ETHCompiler(GateCompiler):
         self.phase = [0] * N
         self.global_phase = global_phase
 
-    def decompose(self, layers):
+    def depth(qc):
+        """
+        Returns:
+            int: Depth of circuit.
+
+        Notes:
+            Based on this reference
+            https://quantumcomputing.stackexchange.com/questions/5769/how-to-calculate-circuit-depth-properly
+        """
+        N = qc.N
+        levels = [0] * N
+        gates = qc.gates
+        for gate in gates:
+            for target in gate.targets:
+                levels[target] += 1
+            if gate.controls is not None:
+                for control in gate.controls:
+                    levels[control] += 1
+        max_level = max(levels)
+        return max_level
+
+    def layers(qc):
+        """
+        Parallelise the gates
+        Returns:
+            int: Layers
+        """
+        layer = [[] for i in range(self.depth())]
+        N = qc.N
+        levels = [0] * N
+        gates = qc.gates
+        for gate in gates:
+            for target in gate.targets:
+                levels[target] += 1
+            if gate.controls is not   None:
+                for control in gate.controls:
+                    levels[control] += 1
+            idx = max(levels)-1
+            layer[idx].append(gate)
+        return layer
+
+    def decompose(self, qc):
         # TODO further improvement can be made here,
         # e.g. merge single qubit rotation gate, combine XX gates etc.
         self.dt_list = [[] for i in range(len(layers))]

@@ -161,7 +161,8 @@ class ETHProcessor(Processor):
             one Hamiltonian.
         """
         gates = qc.gates
-        layers = qc.layers()
+        #layers = qc.layers()
+
         N = qc.N # Number of qubits in circuit
         dims = [3] * N
         if N > self.N:
@@ -179,7 +180,7 @@ class ETHProcessor(Processor):
         dec = ETHCompiler(
             N, self._paras,
             global_phase=0., num_ops=len(self.ctrls))
-        tlist, self.coeffs, self.global_phase = dec.decompose(layers)
+        tlist, self.coeffs, self.global_phase = dec.decompose(qc)
         for i in range(len(self.pulses)):
             self.pulses[i].tlist = tlist
 
@@ -300,11 +301,11 @@ class ETHProcessor(Processor):
 
         y_shift = 0
         for n, uu in enumerate(u):
-            print(y_shift)
-            if max(u[n]) != 0.0:
-                ax.plot(t, 0.5*(u[n])/max(u[n])+y_shift, label=u_labels[n])
+            max_u = max(u[n])
+            if max_u > 1:
+                ax.plot(t,(0.5*u[n]/max_u+y_shift), label=u_labels[n])
             else:
-                ax.plot(t, (u[n] + y_shift), label=u_labels[n])
+                ax.plot(t,(u[n]+y_shift), label=u_labels[n])
             if (n % 3) == 2:
                 y_shift += 1
 
