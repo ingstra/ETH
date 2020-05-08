@@ -222,6 +222,7 @@ class ETHCompiler(GateCompiler):
 
         # Flux tuning of qubit n
         rotating_frame = self.params['Rotating frequency']
+
         def Delta(t,args):
             n = args['n']
             d = 0.78
@@ -229,8 +230,10 @@ class ETHCompiler(GateCompiler):
 
         # Gate length
         L = 96
+
         # buffer
         b = 15
+
         # Total time in ns
         t_total = L+2*b
         tlist = np.linspace(0,t_total,500)
@@ -240,14 +243,23 @@ class ETHCompiler(GateCompiler):
         alpha = 4118.449374231894
         beta = 4372.68517659092
 
+         # rotation
+        gamma1 = 2*beta
+        gamma2 = 2*alpha
+
+        q2 = gate.targets[0] # target qubit
+        q1 = gate.controls[0] # control qubits
+
+        self.phase[q1] += gamma1
+        self.phase[q2] += gamma2
+
         dt_list = tlist[1:] - tlist[:-1]
         self.dt_list[idx].append(dt_list)
 
-        q = gate.controls[0] # control qubit
-        args = {'n': q,'amp': 1.46, 'L': L, 'buffer': b, 'conversion constant': 0.47703297}
+        args = {'n': q1,'amp': 1.46, 'L': L, 'buffer': b, 'conversion constant': 0.47703297}
         coeffs = Delta(tlist,args)
         coeffs = np.delete(coeffs, len(coeffs)-1)
-        self.coeff_list[3*q+2].append(list(coeffs))
+        self.coeff_list[3*q1+2].append(list(coeffs))
 
 
     def globalphase_dec(self, gate):

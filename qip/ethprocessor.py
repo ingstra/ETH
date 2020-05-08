@@ -6,8 +6,8 @@ import numpy as np
 from qutip import *
 from qutip.qip.circuit import QubitCircuit
 from qutip.qip.device.processor import Processor
-from qutip.qip.compiler.gatecompiler import GateCompiler
 from qip.ethcompiler import ETHCompiler
+from qip.ethnoise import ETHNoise
 
 __all__ = ['ETHProcessor']
 
@@ -35,7 +35,7 @@ class ETHProcessor(Processor):
         in the physical realization, such as laser frequency, detuning etc.
     """
 
-    def __init__(self, correct_global_phase=True):
+    def __init__(self, correct_global_phase=True, noisy=False):
         self.N = 4 # Number qubits
 
         self.correct_global_phase = correct_global_phase
@@ -50,11 +50,21 @@ class ETHProcessor(Processor):
         # Coupling strength in (GHz) between qubits [1-2, 2-3, 3-4]
         self.cpl = [2*np.pi * 3.8*1e-3, 2*np.pi * 3.4*1e-3 , 2*np.pi * 3.5*1e-3]
 
-        # Coupling map
-        self.cpl_map = [[0,1],[1,2],[2,3]]
+        self.c_ops = []
 
         # Qutrit system
         self.dims = [3] * self.N
+
+        # Coupling map
+        self.cpl_map = [[0,1],[1,2],[2,3]]
+
+        # T1 (ns)
+        self.T1 = [25.111199*1e3,  17.987260*1e3, 25.461490*1e3, 46.371173*1e3]
+
+        # T2 (ns)
+        self.T2 = [23.872090*1e3, 10.778744*1e3, 17.271457*1e3, 10.838021*1e3]
+
+        super(ETHProcessor, self).__init__(self.N, dims=self.dims, spline_kind=self.spline_kind)
 
         self._paras = {}
         self.set_up_params()
@@ -65,6 +75,10 @@ class ETHProcessor(Processor):
         """
         self._paras["Resonance frequency"] = self.resonance_freq
         self._paras["Anharmonicity"] = self.anharmonicity
+        self._paras["T1"] = self.t1
+        self._paras["T2"] = self.t2
+        #self._paras["T1_ef"] = self.t1_ef
+        #self._paras["T2_ef"] = self.t2_ef
 
     @property
     def params(self):
@@ -80,10 +94,23 @@ class ETHProcessor(Processor):
         """
         a = destroy(3)
         eye = qeye(3)
+        [sig11, sig22, sig33, sig12, sig23, sig31] = qutrit_ops()
         H_qubits = 0
+
         for m in range(N):
             # Creation operator for the m:th qubit
             b = tensor([a if m == j else eye for j in range(N)])
+
+            # sig11
+            t1 = self.T1[m]
+            t2 = self.T2[m]
+            T2_eff = 1./(1./t2-1./(2.*t1))
+
+            c1 = tensor([sig22 if m == j else eye for j in range(N)])
+            c2 = tensor([sig22 if m == j else eye for j in range(N)])
+
+            self.c_ops.append(np.sqrt(1/t1)* c1)
+            self.c_ops.append(np.sqrt(1/T2_eff)* c2)
 
             # Drive Hamiltonian
             H_drive_x = b.dag() + b
@@ -98,7 +125,11 @@ class ETHProcessor(Processor):
             H_qubits += (self.resonance_freq[m] - self.rotating_freq)*b.dag()*b  + (self.anharmonicity[m]/2) * b.dag()**2 * b**2
 
         self.add_drift(H_qubits, targets = list(range(N)))
-        
+
+        # Setup noise
+        lindblad_noise = ETHNoise(t1=self.T1[0:N],t2=self.T2[0:N],targets=list(range(N)))
+        #self.add_noise(lindblad_noise)
+
         # Construct the Interaction/Coupling Hamiltonian
         if N > 1:
             H_cpl = 0
@@ -135,6 +166,7 @@ class ETHProcessor(Processor):
         dims = [3] * N
         if N > self.N:
             raise TypeError('This processor only supports up to four qubits.')
+
         super(ETHProcessor, self).__init__(N=N,dims=dims)
 
         # Setup the rotating frame frequency
@@ -154,7 +186,7 @@ class ETHProcessor(Processor):
         return tlist, self.coeffs
 
     def run_state(self, init_state=None, analytical=False, qc=None,
-                  states=None, **kwargs):
+                  states=None, noisy=False, **kwargs):
         """
         If `analytical` is False, use :func:`qutip.mesolve` to
         calculate the time of the state evolution
@@ -192,6 +224,10 @@ class ETHProcessor(Processor):
         """
         if qc is not None:
             self.load_circuit(qc)
+
+        if noisy == True:
+            kwargs = {'c_ops': self.c_ops}
+
         return super(ETHProcessor, self).run_state(
             init_state=init_state, analytical=analytical,
             states=states, **kwargs)
@@ -231,6 +267,7 @@ class ETHProcessor(Processor):
         """
         #dt = 0.01
         H_ops, H_u = self.get_ops_and_u()
+
         # FIXME This might becomes a problem if new tlist other than
         # int the default pulses are added.
         tlist = self.get_full_tlist()
@@ -246,7 +283,7 @@ class ETHProcessor(Processor):
 
         return tlist, u, self.get_ops_labels()
 
-    def plot_pulses(self, title=None, noisy=None, figsize=(12, 6), dpi=None):
+    def plot_pulses(self, title=None, figsize=(12, 6), dpi=None):
         """
         Maps the physical interaction between the circuit components for the
         desired physical system.
@@ -256,16 +293,20 @@ class ETHProcessor(Processor):
         fig, ax: Figure
             Maps the physical interaction between the circuit components.
         """
-        # TODO add test
-        if noisy is not None:
-            return super(QuantumDevice, self).plot_pulses(
-                title=title, noisy=noisy)
         import matplotlib.pyplot as plt
         t, u, u_labels = self.pulse_matrix()
 
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+
+        y_shift = 0
         for n, uu in enumerate(u):
-            ax.plot(t, u[n], label=u_labels[n])
+            print(y_shift)
+            if max(u[n]) != 0.0:
+                ax.plot(t, 0.5*(u[n])/max(u[n])+y_shift, label=u_labels[n])
+            else:
+                ax.plot(t, (u[n] + y_shift), label=u_labels[n])
+            if (n % 3) == 2:
+                y_shift += 1
 
         ax.axis('tight')
         #ax.set_ylim(-1.5 * 2 * np.pi, 1.5 * 2 * np.pi)
@@ -273,7 +314,18 @@ class ETHProcessor(Processor):
                   bbox_to_anchor=(1, 0.5), ncol=(1 + len(u) // 16))
         ax.set_ylabel("Control pulse amplitude (arb. u.)")
         ax.set_xlabel("Time (ns)")
+
+        num_q = range(int(len(u)/3))
+        a = ('q%d' % i for i in num_q)
+        plt.yticks(num_q,tuple(a))
+
         if title is not None:
             ax.set_title(title)
         fig.tight_layout()
         return fig, ax
+
+"""
+device_noise = []
+if (t1 is not None) or (t2 is not None):
+    device_noise += [RelaxationNoise(t1, t2).get_noisy_dynamics(dims)]
+"""
